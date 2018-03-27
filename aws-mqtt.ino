@@ -27,6 +27,7 @@
 //JSON
 #include<ArduinoJson.h>
 
+#include <MillisTimer.h>
 #include "Credentials.h"
 
 
@@ -43,6 +44,8 @@ IPStack ipstack(awsWSclient);
 MQTT::Client<IPStack, Countdown, maxMQTTpackageSize, maxMQTTMessageHandlers> *client = NULL;
 
 StaticJsonBuffer<2000> jsonBuffer;
+
+MillisTimer healthyTimer = MillisTimer(1000);
 
 void setMacAddress() {
   uint8_t MAC_array[6];
@@ -130,7 +133,7 @@ bool connect () {
 //subscribe to a mqtt topic
 void subscribe () {
    //subscript to a topic
-    int rc = client->subscribe(aws_topic, MQTT::QOS0, messageArrived);
+    int rc = client->subscribe("device-controller-topic", MQTT::QOS0, messageArrived);
     if (rc != 0) {
       Serial.print("rc from MQTT subscribe is ");
       Serial.println(rc);
@@ -140,7 +143,7 @@ void subscribe () {
 }
 
 //send a message to a mqtt topic
-void sendmessage () {
+void sendRegMessage () {
     //send a message
       MQTT::Message message;
 
@@ -149,7 +152,10 @@ void sendmessage () {
      JsonObject& state=root.createNestedObject("state");
      JsonObject& reported=state.createNestedObject("reported");
      reported["deviceId"] = MAC_char;
-     char buf[100]; 
+     reported["deviceDesc"]="DEVICE DESCITPRION";
+     reported["arnEndpoint"]=aws_endpoint;
+     reported["topic"]="listener_topic";
+     char buf[300]; 
      root.printTo((char*)buf, root.measureLength() + 1);
         
     message.qos = MQTT::QOS0;
@@ -159,6 +165,22 @@ void sendmessage () {
     message.payloadlen = strlen(buf)+1;
     int rc = client->publish(aws_topic, message); 
     jsonBuffer.clear();
+}
+
+void sendDeviceHealthMsg(){
+  Serial.println ("Sending DeviceHealth message.");
+   MQTT::Message message;
+   message.qos = MQTT::QOS0;
+   message.retained = false;
+   message.dup = false;
+   message.payload = (void*)MAC_char;
+   message.payloadlen = strlen(MAC_char)+1;
+   int rc = client->publish(healthy_reports_topic, message); 
+}
+
+void healthyTimerExpiredHanlder(MillisTimer &mt){
+   
+  sendDeviceHealthMsg();
 }
 
 
@@ -186,8 +208,12 @@ void setup() {
 
     if (connect ()){
       subscribe ();
-      sendmessage ();
+      sendRegMessage ();
     }
+
+     healthyTimer.setInterval(1000 *60*5);
+     healthyTimer.expiredHandler(healthyTimerExpiredHanlder);
+     healthyTimer.start();
 
 }
 
@@ -201,5 +227,6 @@ void loop() {
       subscribe ();      
     }
   }
+  healthyTimer.run();
 
 }
