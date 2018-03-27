@@ -133,7 +133,7 @@ bool connect () {
 //subscribe to a mqtt topic
 void subscribe () {
    //subscript to a topic
-    int rc = client->subscribe("device-controller-topic", MQTT::QOS0, messageArrived);
+    int rc = client->subscribe(device_ctrl_topic, MQTT::QOS0, messageArrived);
     if (rc != 0) {
       Serial.print("rc from MQTT subscribe is ");
       Serial.println(rc);
@@ -154,7 +154,7 @@ void sendRegMessage () {
      reported["deviceId"] = MAC_char;
      reported["deviceDesc"]="DEVICE DESCITPRION";
      reported["arnEndpoint"]=aws_endpoint;
-     reported["topic"]="listener_topic";
+     reported["topic"]=device_ctrl_topic;
      char buf[300]; 
      root.printTo((char*)buf, root.measureLength() + 1);
         
