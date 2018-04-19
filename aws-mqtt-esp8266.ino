@@ -29,6 +29,7 @@
 
 #include <MillisTimer.h>
 #include "Credentials.h"
+#include <LiquidCrystal_I2C.h>
 
 
 
@@ -46,6 +47,7 @@ MQTT::Client<IPStack, Countdown, maxMQTTpackageSize, maxMQTTMessageHandlers> *cl
 StaticJsonBuffer<2000> jsonBuffer;
 
 MillisTimer healthyTimer = MillisTimer(1000);
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
 
 void setMacAddress() {
   uint8_t MAC_array[6];
@@ -86,6 +88,14 @@ void messageArrived(MQTT::MessageData& md)
   char* msg = new char[message.payloadlen+1]();
   memcpy (msg,message.payload,message.payloadlen);
   Serial.println(msg);
+  JsonObject& root = jsonBuffer.parseObject(msg);
+  if (root.success()) {
+    const char* msg_payload = root["message"];
+    lcd.clear();
+    lcd.setCursor(0, 0); 
+    lcd.print(msg_payload); 
+  }
+    
   delete msg;
 }
 
@@ -133,7 +143,7 @@ bool connect () {
 //subscribe to a mqtt topic
 void subscribe () {
    //subscript to a topic
-    int rc = client->subscribe(device_ctrl_topic, MQTT::QOS0, messageArrived);
+    int rc = client->subscribe(strcpy(device_ctrl_topic,MAC_char), MQTT::QOS0, messageArrived);
     if (rc != 0) {
       Serial.print("rc from MQTT subscribe is ");
       Serial.println(rc);
@@ -154,7 +164,7 @@ void sendRegMessage () {
      reported["deviceId"] = MAC_char;
      reported["deviceDesc"]="DEVICE DESCITPRION";
      reported["arnEndpoint"]=aws_endpoint;
-     reported["topic"]=device_ctrl_topic;
+     reported["topic"]=strcpy(device_ctrl_topic,MAC_char);
      char buf[300]; 
      root.printTo((char*)buf, root.measureLength() + 1);
         
@@ -188,15 +198,26 @@ void setup() {
     Serial.begin (115200);
     delay (2000);
     Serial.setDebugOutput(1);
+    
+    lcd.begin(16,2);
+    lcd.init();
+    lcd.backlight();
 
     //fill with ssid and wifi password
     WiFiMulti.addAP(wifi_ssid, wifi_password);
     Serial.println ("connecting to wifi");
+    lcd.setCursor(1, 0);      
+    lcd.print("WiFi connecting");
+    
     while(WiFiMulti.run() != WL_CONNECTED) {
         delay(100);
         Serial.print (".");
     }
     Serial.println ("\nconnected");
+    lcd.clear();
+    lcd.setCursor(1, 0); 
+    lcd.print("Connected to Wifi !");
+    
     setMacAddress();
 
     //fill AWS parameters    
@@ -206,14 +227,24 @@ void setup() {
     awsWSclient.setAWSSecretKey(aws_secret);
     awsWSclient.setUseSSL(true);
 
+    lcd.clear();
+    lcd.setCursor(1, 0); 
+    lcd.print("AWS connecting...");
+
     if (connect ()){
       subscribe ();
       sendRegMessage ();
     }
 
-     healthyTimer.setInterval(1000 *60*5);
-     healthyTimer.expiredHandler(healthyTimerExpiredHanlder);
-     healthyTimer.start();
+    lcd.clear();
+    lcd.setCursor(1, 0); 
+    lcd.print("AWS connected ! ");
+    lcd.setCursor(1, 1);
+    lcd.print("Waitng for message.. "); 
+
+    healthyTimer.setInterval(1000 *60*10);
+    healthyTimer.expiredHandler(healthyTimerExpiredHanlder);
+    healthyTimer.start();
 
 }
 
