@@ -48,6 +48,7 @@ StaticJsonBuffer<2000> jsonBuffer;
 
 MillisTimer healthyTimer = MillisTimer(1000);
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
+char device_ctrl_topic[100];
 
 void setMacAddress() {
   uint8_t MAC_array[6];
@@ -143,7 +144,7 @@ bool connect () {
 //subscribe to a mqtt topic
 void subscribe () {
    //subscript to a topic
-    int rc = client->subscribe(strcpy(device_ctrl_topic,MAC_char), MQTT::QOS0, messageArrived);
+    int rc = client->subscribe(device_ctrl_topic, MQTT::QOS0, messageArrived);
     if (rc != 0) {
       Serial.print("rc from MQTT subscribe is ");
       Serial.println(rc);
@@ -164,7 +165,7 @@ void sendRegMessage () {
      reported["deviceId"] = MAC_char;
      reported["deviceDesc"]="DEVICE DESCITPRION";
      reported["arnEndpoint"]=aws_endpoint;
-     reported["topic"]=strcpy(device_ctrl_topic,MAC_char);
+     reported["topic"]=device_ctrl_topic;
      char buf[300]; 
      root.printTo((char*)buf, root.measureLength() + 1);
         
@@ -220,6 +221,8 @@ void setup() {
     
     setMacAddress();
 
+    sprintf(device_ctrl_topic, "%s%s", device_ctrl_topic_prefix, MAC_char);
+    
     //fill AWS parameters    
     awsWSclient.setAWSRegion(aws_region);
     awsWSclient.setAWSDomain(aws_endpoint);
