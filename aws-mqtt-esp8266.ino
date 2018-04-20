@@ -163,9 +163,11 @@ void sendRegMessage () {
      JsonObject& state=root.createNestedObject("state");
      JsonObject& reported=state.createNestedObject("reported");
      reported["deviceId"] = MAC_char;
-     reported["deviceDesc"]="DEVICE DESCITPRION";
-     reported["arnEndpoint"]=aws_endpoint;
-     reported["topic"]=device_ctrl_topic;
+     reported["actionType"]="REGISTRATION";
+     JsonObject& deviceDetails=reported.createNestedObject("deviceDetails");
+     deviceDetails["deviceDesc"]="DEVICE DESCITPRION";
+     deviceDetails["arnEndpoint"]=aws_endpoint;
+     deviceDetails["topic"]=device_ctrl_topic;
      char buf[300]; 
      root.printTo((char*)buf, root.measureLength() + 1);
         
