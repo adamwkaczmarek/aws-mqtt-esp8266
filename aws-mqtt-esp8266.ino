@@ -3,6 +3,7 @@
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
+#include "DHT.h"
 
 //AWS
 #include "sha256.h"
@@ -31,6 +32,12 @@
 #include "Credentials.h"
 #include <LiquidCrystal_I2C.h>
 
+#define DHTPIN D3  
+#define DHTTYPE DHT22 
+
+DHT dht(DHTPIN, DHTTYPE);
+double localHum = 0;
+double localTemp = 0;
 
 
 //MQTT config
@@ -46,9 +53,15 @@ MQTT::Client<IPStack, Countdown, maxMQTTpackageSize, maxMQTTMessageHandlers> *cl
 
 StaticJsonBuffer<2000> jsonBuffer;
 
+// timers
+
 MillisTimer healthyTimer = MillisTimer(1000);
+MillisTimer readDHTTimer = MillisTimer(1000);
+
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
 char device_ctrl_topic[100];
+//count messages arrived
+int arrivedcount = 0;
 
 void setMacAddress() {
   uint8_t MAC_array[6];
@@ -59,6 +72,56 @@ void setMacAddress() {
   Serial.println(MAC_char);
 }
 
+void sendDHTData(int tempInt,int humInt){
+      MQTT::Message message;
+     JsonObject& root = jsonBuffer.createObject();
+     root["actionType"]="DATA_SENDING";
+     JsonObject& state=root.createNestedObject("state");
+     JsonObject& reported=state.createNestedObject("reported");
+     reported["deviceId"] = MAC_char;
+     JsonObject& deviceData=reported.createNestedObject("deviceData");
+     deviceData["temp"]=tempInt;
+     deviceData["hum"]= humInt;
+     char buf[300]; 
+     root.printTo((char*)buf, root.measureLength() + 1);
+        
+    message.qos = MQTT::QOS0;
+    message.retained = false;
+    message.dup = false;
+    message.payload = (void*)buf;
+    message.payloadlen = strlen(buf)+1;
+    int rc = client->publish(aws_topic, message); 
+    jsonBuffer.clear();
+}
+
+void getDHT()
+{
+//  float tempIni = localTemp;
+//  float humIni = localHum;
+  double localTempDouble = dht.readTemperature();
+  double localHumDouble = dht.readHumidity();
+  
+  if (localHumDouble==NULL || localTempDouble==NULL || localTempDouble >100 || localTempDouble < -100 || localHumDouble >100 || localHumDouble< 0 )   // Check if any reads failed and exit early (to try again).
+  {
+    Serial.println("Failed to read from DHT sensor!");
+//    localTemp = tempIni;
+//    localHum = humIni;
+    return;
+  }
+
+ if(abs(localTempDouble-localTemp) >1  || abs(localHumDouble-localHum)>3 )
+  {
+     localTemp=localTempDouble;
+     localHum=localHumDouble;
+     int tempInt = localTemp;
+     int humInt = localHum;
+     sendDHTData(tempInt,humInt);   
+  }
+
+}
+
+
+
 //generate random mqtt clientID
 char* generateClientID () {
   char* cID = new char[23]();
@@ -67,8 +130,7 @@ char* generateClientID () {
   return cID;
 }
 
-//count messages arrived
-int arrivedcount = 0;
+
 
 //callback to handle mqtt messages
 void messageArrived(MQTT::MessageData& md)
@@ -161,9 +223,9 @@ void sendRegMessage () {
      
      JsonObject& root = jsonBuffer.createObject();
      JsonObject& state=root.createNestedObject("state");
+     root["actionType"]="REGISTRATION";
      JsonObject& reported=state.createNestedObject("reported");
      reported["deviceId"] = MAC_char;
-     reported["actionType"]="REGISTRATION";
      JsonObject& deviceDetails=reported.createNestedObject("deviceDetails");
      deviceDetails["deviceDesc"]="DEVICE DESCITPRION";
      deviceDetails["arnEndpoint"]=aws_endpoint;
@@ -194,6 +256,11 @@ void sendDeviceHealthMsg(){
 void healthyTimerExpiredHanlder(MillisTimer &mt){
    
   sendDeviceHealthMsg();
+}
+
+void readDHTExpiredHanlder(MillisTimer &mt){
+  getDHT();
+   
 }
 
 
@@ -251,6 +318,10 @@ void setup() {
     healthyTimer.expiredHandler(healthyTimerExpiredHanlder);
     healthyTimer.start();
 
+    readDHTTimer.setInterval(10000);
+    readDHTTimer.expiredHandler(readDHTExpiredHanlder);
+    readDHTTimer.start();
+
 }
 
 void loop() {
@@ -264,5 +335,6 @@ void loop() {
     }
   }
   healthyTimer.run();
+  readDHTTimer.run();
 
 }
