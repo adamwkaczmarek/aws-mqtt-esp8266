@@ -75,8 +75,8 @@ void setMacAddress() {
 void sendDHTData(int tempInt,int humInt){
       MQTT::Message message;
      JsonObject& root = jsonBuffer.createObject();
-     root["actionType"]="DATA_SENDING";
      JsonObject& state=root.createNestedObject("state");
+     root["actionType"]="DATA_SENDING";
      JsonObject& reported=state.createNestedObject("reported");
      reported["deviceId"] = MAC_char;
      JsonObject& deviceData=reported.createNestedObject("deviceData");
